@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Kafka message consumer component that handles consuming messages from Kafka topics.
@@ -44,32 +45,37 @@ public class KafkaMessageConsumer {
    */
   public List<String> consumeMessages(long startOffset, long endOffset) {
     List<String> messages = new ArrayList<>();
+
     try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(
         consumerFactory.getConfigurationProperties())) {
-      List<TopicPartition> topicPartitions = new ArrayList<>();
-      for (PartitionInfo info : consumer.partitionsFor(strTopic)) {
-        TopicPartition topicPartition = new TopicPartition(strTopic, info.partition());
-        topicPartitions.add(topicPartition);
-      }
+      List<TopicPartition> topicPartitions = consumer
+          .partitionsFor(strTopic)
+          .stream()
+          .map(info -> new TopicPartition(strTopic, info.partition()))
+          .collect(Collectors.toList());
 
       consumer.assign(topicPartitions);
 
-      for (TopicPartition topicPartition : topicPartitions) {
-        consumer.seek(topicPartition, startOffset);
-      }
+      topicPartitions.forEach(topicPartition -> consumer.seek(topicPartition, startOffset));
 
       ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
-      for (ConsumerRecord<String, String> record : records) {
-        if (record.offset() < endOffset) {
-          log.info("Consumed String message: {}, offset: {}", record.value(), record.offset());
-          messages.add(record.value());
-        }
-      }
-      consumer.commitAsync();
+
+      messages = records
+          .records(topicPartitions.get(0))
+          .stream()  // Assuming single partition topic for simplicity
+          .filter(record -> record.offset() < endOffset)
+          .peek(record -> log.info("Consumed String message: {}, offset: {}", record.value(),
+              record.offset()))
+          .map(ConsumerRecord::value)
+          .collect(Collectors.toList());
+
+      consumer.commitAsync(); // Commit offsets asynchronously
+
     } catch (Exception e) {
-      log.error("Error while consuming String messages: {}", e.getMessage());
-      throw e;
+      log.error("Error while consuming String messages: {}", e.getMessage(), e);
+      throw new RuntimeException("Error while consuming messages", e);
     }
+
     return messages;
   }
 
@@ -83,34 +89,37 @@ public class KafkaMessageConsumer {
    */
   public List<Employee> consumeJsonMessages(long startOffset, long endOffset) {
     List<Employee> jsonMessages = new ArrayList<>();
+
     try (KafkaConsumer<String, Employee> consumer = new KafkaConsumer<>(
         consumerJsonFactory.getConfigurationProperties())) {
-      List<TopicPartition> topicPartitions = new ArrayList<>();
-      for (PartitionInfo info : consumer.partitionsFor(userJsonTopic)) {
-        TopicPartition topicPartition = new TopicPartition(userJsonTopic, info.partition());
-        topicPartitions.add(topicPartition);
-      }
+      List<TopicPartition> topicPartitions = consumer
+          .partitionsFor(userJsonTopic)
+          .stream()
+          .map(info -> new TopicPartition(userJsonTopic, info.partition()))
+          .collect(Collectors.toList());
 
       consumer.assign(topicPartitions);
 
-      for (TopicPartition topicPartition : topicPartitions) {
-        consumer.seek(topicPartition, startOffset);
-      }
+      topicPartitions.forEach(topicPartition -> consumer.seek(topicPartition, startOffset));
 
       ConsumerRecords<String, Employee> records = consumer.poll(Duration.ofSeconds(5));
-      for (ConsumerRecord<String, Employee> record : records) {
-        if (record.offset() > endOffset) {
-          break;
-        }
-        log.info("Consumed Json message: {}, offset: {}", record.value(), record.offset());
-        jsonMessages.add(record.value());
-      }
 
-      consumer.commitAsync();
+      jsonMessages = records
+          .records(topicPartitions.get(0))
+          .stream()  // Assuming single partition topic for simplicity
+          .filter(record -> record.offset() <= endOffset) // Adjusted condition to include endOffset
+          .peek(record -> log.info("Consumed JSON message: {}, offset: {}", record.value(),
+              record.offset()))
+          .map(ConsumerRecord::value)
+          .collect(Collectors.toList());
+
+      consumer.commitAsync(); // Commit offsets asynchronously
+
     } catch (Exception e) {
-      log.error("Error while consuming JSON messages: {}", e.getMessage());
-      throw e;
+      log.error("Error while consuming JSON messages: {}", e.getMessage(), e);
+      throw new RuntimeException("Error while consuming JSON messages", e);
     }
+
     return jsonMessages;
   }
 

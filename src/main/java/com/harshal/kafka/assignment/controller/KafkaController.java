@@ -40,9 +40,12 @@ public class KafkaController {
    * @return A response indicating the success of the operation.
    */
   @PostMapping("/sendString")
-  public String sendStringMessage(@RequestParam("message") String message) {
+  public ResponseEntity<String> sendStringMessage(@RequestParam("message") String message) {
     kafkaProducer.sendMessage(message);
-    return "Message sent: " + message;
+    String responseMessage = "Message sent: " + message;
+    return ResponseEntity
+        .status(HttpStatus.OK)
+        .body(responseMessage);
   }
 
   /**
@@ -52,9 +55,12 @@ public class KafkaController {
    * @return A response indicating the success of the operation.
    */
   @PostMapping("/sendJson")
-  public String sendJsonMessage(@RequestBody Employee employee) {
+  public ResponseEntity<String> sendJsonMessage(@RequestBody Employee employee) {
     kafkaProducer.sendJsonMessage(employee);
-    return "JSON Message sent to Kafka topic";
+    String responseMessage = "JSON Message sent to Kafka topic";
+    return ResponseEntity
+        .status(HttpStatus.OK)
+        .body(responseMessage);
   }
 
   /**
